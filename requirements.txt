@@ -1,0 +1,5 @@
+loguru
+mahjong~=1.1.11
+kanachan~=0.1.0
+
+torch~=2.2.2+cu121
