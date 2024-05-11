@@ -7,6 +7,7 @@ from typing import (
     Optional,
     List,
 )
+import warnings
 
 import torch
 
@@ -44,6 +45,15 @@ from kanachan.constants import (
 from kanachan.model_loader import load_model
 
 from hand_calculator import has_yihan, check_kokushi, calculate_shanten
+
+warnings.filterwarnings(
+    "ignore", category=UserWarning, message=".*checkpoint_sequential.*"
+)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=".*None of the inputs have requires_grad=True.*",
+)
 
 
 class GameState:
@@ -756,7 +766,7 @@ class Kanachan:
     def __init__(
         self,
         # model_path=f"{pathlib.Path(__file__).parent}/model/model.kanachan",
-        model_path=f"{pathlib.Path(__file__).parent}/model/model.400000.kanachan",
+        model_path=f"{pathlib.Path(__file__).parent}/model/model.25011200.kanachan",
     ) -> None:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = "cpu"
@@ -1017,6 +1027,7 @@ class Kanachan:
 
         with torch.no_grad():
             progression = self.__model(sparse, numeric, progression, candidates_)
+            candidates_ = torch.squeeze(candidates_, dim=0)
             if len(progression) == 3:
                 action = progression[2].squeeze(dim=0).item()
 
@@ -1029,15 +1040,6 @@ class Kanachan:
 
                 sum_of_elements = torch.sum(shifted_tensor_data)
                 proportions = shifted_tensor_data / sum_of_elements
-
-                print("Elements: ", end="")
-                for i, element in enumerate(proportions):
-                    if i == action:
-                        print(f"{i}: [{element.item():.2f}] ", end="")
-                    else:
-                        print(f"{i}: {element.item():.2f} ", end="")
-                print()
-
             elif len(progression) == 4:
                 action = progression[3].squeeze(dim=0).item()
 
@@ -1050,21 +1052,82 @@ class Kanachan:
 
                 sum_of_elements = torch.sum(shifted_tensor_data)
                 proportions = shifted_tensor_data / sum_of_elements
-
-                print("Elements: ", end="")
-                for i, element in enumerate(proportions):
-                    if i == action:
-                        print(f"{i}: [{element.item():.2f}] ", end="")
-                    else:
-                        print(f"{i}: {element.item():.2f} ", end="")
-                print()
-
             else:
                 raise ValueError()
-        candidates_ = torch.squeeze(candidates_, dim=0)
         decision = candidates_[action].item()
 
-        if 0 <= decision and decision <= 147:
+        mask_unicode_4p_dict = {}
+
+        def mask_prob(index: int) -> str:
+            element = proportions[index]
+            if index == action:
+                return f"[{element.item():.2f}] "
+            else:
+                return f"{element.item():.2f} "
+
+        for index, candidate in enumerate(candidates):
+            if 0 <= candidate <= 147:
+                tile = candidate // 4
+                tile = _NUM2TILE[tile]
+                encode = candidate % 4
+                moqi = encode // 2 == 1
+                encode = encode % 2
+                liqi = encode == 1
+
+                mask_unicode_4p_dict[tile] = mask_prob(index)
+
+                if liqi:
+                    mask_unicode_4p_dict["reach"] = mask_prob(index)
+                continue
+
+            if 148 <= decision <= 181:
+                mask_unicode_4p_dict["kan_select"] = mask_prob(index)
+                continue
+
+            if 182 <= decision <= 218:
+                mask_unicode_4p_dict["kan_select"] = mask_prob(index)
+                continue
+
+            if decision == 219:
+                mask_unicode_4p_dict["hora"] = mask_prob(index)
+                continue
+
+            if decision == 220:
+                mask_unicode_4p_dict["ryukyoku"] = mask_prob(index)
+                continue
+
+            if decision == 221:
+                mask_unicode_4p_dict["none"] = mask_prob(index)
+                continue
+
+            if 222 <= decision <= 311:
+                mask_unicode_4p_dict["chi"] = mask_prob(index)
+                continue
+
+            if 312 <= decision <= 431:
+                mask_unicode_4p_dict["pon"] = mask_prob(index)
+                continue
+
+            if 432 <= decision <= 542:
+                mask_unicode_4p_dict["kan_select"] = mask_prob(index)
+                continue
+
+            if 543 <= decision <= 545:
+                mask_unicode_4p_dict["hora"] = mask_prob(index)
+                continue
+
+            raise RuntimeError(f"An invalid decision (decision = {decision}).")
+
+        print(f"Decision: {mask_unicode_4p_dict}")
+        # print("Elements: ", end="")
+        #     for i, element in enumerate(proportions):
+        #         if i == action:
+        #             print(f"{i}: [{element.item():.2f}] ", end="")
+        #         else:
+        #             print(f"{i}: {element.item():.2f} ", end="")
+        # print()
+
+        if 0 <= decision <= 147:
             tile = decision // 4
             tile = _NUM2TILE[tile]
             encode = decision % 4
@@ -1076,11 +1139,11 @@ class Kanachan:
                 return {"type": "reach", "actor": seat}
             return {"type": "dahai", "actor": seat, "pai": tile, "tsumogiri": moqi}
 
-        if 148 <= decision and decision <= 181:
+        if 148 <= decision <= 181:
             angang = _NUM2ANGANG[decision - 148]
             return {"type": "ankan", "actor": seat, "consumed": angang}
 
-        if 182 <= decision and decision <= 218:
+        if 182 <= decision <= 218:
             tile, consumed = _NUM2JIAGANG[decision - 182]
             return {"type": "kakan", "actor": seat, "pai": tile, "consumed": consumed}
 
@@ -1104,7 +1167,7 @@ class Kanachan:
                     break
             return {"type": "none"}
 
-        if 222 <= decision and decision <= 311:
+        if 222 <= decision <= 311:
             tile, consumed = _NUM2CHI[decision - 222]
             return {
                 "type": "chi",
@@ -1114,7 +1177,7 @@ class Kanachan:
                 "consumed": consumed,
             }
 
-        if 312 <= decision and decision <= 431:
+        if 312 <= decision <= 431:
             encode = decision - 312
             relseat = encode // 40
             target = (seat + relseat + 1) % 4
@@ -1128,7 +1191,7 @@ class Kanachan:
                 "consumed": consumed,
             }
 
-        if 432 <= decision and decision <= 542:
+        if 432 <= decision <= 542:
             encode = decision - 432
             relseat = encode // 37
             target = (seat + relseat + 1) % 4
@@ -1142,7 +1205,7 @@ class Kanachan:
                 "consumed": consumed,
             }
 
-        if 543 <= decision and decision <= 545:
+        if 543 <= decision <= 545:
             relseat = decision - 543
             target = (seat + relseat + 1) % 4
             hupai = dapai

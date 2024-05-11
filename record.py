@@ -5,14 +5,24 @@ from sys import exit
 from _kanachan import Kanachan
 from convert_majsoul_to_mjai import parse_file
 
+mjai_message_sub_list = []
 
-def process_messages(kanachan, messages):
-    print(f"mjai_message_sub_list: {messages}")
+
+def process_messages(kanachan, messages: list[dict]):
+    global mjai_message_sub_list
+
+    for message in messages:
+        mjai_message_sub_list.append(message)
     result = kanachan.run(messages)
+
     if "type" not in result:
         raise RuntimeError(f"kanachan error {result}")
+
     if result["type"] == "none":
         return
+
+    print(f"mjai_message_sub_list: {mjai_message_sub_list}")
+    mjai_message_sub_list.clear()
     print(f"kanachan: {result}")
 
 

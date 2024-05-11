@@ -177,3 +177,5 @@ cython_debug/
 /docs
 /.readthedocs.yaml
 /.ruff_cache
+*.kanachan
+record.txt
